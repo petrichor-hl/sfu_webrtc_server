@@ -314,3 +314,31 @@ const signalNewPeer = async (peerSocketId, serverProducerId) => {
     }
   );
 };
+
+let isMicOn = true;
+let isCameraOn = true;
+
+const toggleMic = () => {
+  isMicOn = !isMicOn;
+  console.log("toggleMic: " + isMicOn);
+
+  if (isMicOn) {
+    audioProducer.resume();
+  } else {
+    audioProducer.pause();
+  }
+};
+
+const toggleCamera = () => {
+  isCameraOn = !isCameraOn;
+  console.log("toggleCamera: " + isCameraOn);
+
+  if (isCameraOn) {
+    videoProducer.resume();
+  } else {
+    videoProducer.pause();
+  }
+};
+
+btnToggleMic.addEventListener("click", toggleMic);
+btnToggleCamera.addEventListener("click", toggleCamera);
