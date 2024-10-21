@@ -106,7 +106,7 @@ const createDevice = async () => {
 const createSendTransport = () => {
   // see server's socket.on('createWebRtcTransport', sender?, ...)
   // this is a call from Producer, so sender = true
-  socket.emit("createWebRtcTransport", { consumer: false }, ({ params }) => {
+  socket.emit("createWebRtcTransport", { consumer: false }, (params) => {
     // The server sends back params needed
     // to create Send Transport on the client side
     if (params.error) {
@@ -124,7 +124,7 @@ const createSendTransport = () => {
         try {
           // Signal local DTLS parameters to the server side transport
           // see server's socket.on('transport-connect', ...)
-          await socket.emit(
+          socket.emit(
             "transport-connect",
             {
               dtlsParameters,
@@ -150,7 +150,7 @@ const createSendTransport = () => {
         // with the following parameters and produce
         // and expect back a server side producer id
         // see server's socket.on('transport-produce', ...)
-        await socket.emit(
+        socket.emit(
           "transport-produce",
           {
             kind: parameters.kind,
@@ -229,18 +229,14 @@ socket.on("producer-closed", (peerSocketId) => {
 });
 
 const createReceiveTransport = () => {
-  socket.emit("createWebRtcTransport", { consumer: true }, ({ params }) => {
-    if (params.error) {
-      console.log(params.error);
-      return;
-    }
+  socket.emit("createWebRtcTransport", { consumer: true }, (params) => {
     consumerTransport = device.createRecvTransport(params);
 
     consumerTransport.on(
       "connect",
       async ({ dtlsParameters }, callback, errback) => {
         try {
-          await socket.emit("transport-recv-connect", {
+          socket.emit("transport-recv-connect", {
             dtlsParameters,
           });
           callback();
@@ -257,7 +253,7 @@ const signalNewPeer = async (peerSocketId, serverProducerId) => {
     othersPeersInRoom[peerSocketId] = [];
   }
 
-  await socket.emit(
+  socket.emit(
     "transport-recv-consume",
     {
       rtpCapabilities: device.rtpCapabilities,

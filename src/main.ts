@@ -1,6 +1,7 @@
 import express from "express";
-import https from "https";
-import fs from "fs";
+import http from "http";
+// import https from "https";
+// import fs from "fs";
 import path from "path";
 const __dirname__ = path.resolve();
 
@@ -32,17 +33,18 @@ app.get("/", (req, res) => {
 app.use("/sfu/:room", express.static(path.join(__dirname__, "public")));
 
 // SSL cert for HTTPS access
-const options = {
-  key: fs.readFileSync("./server/ssl/key.pem", "utf-8"),
-  cert: fs.readFileSync("./server/ssl/cert.pem", "utf-8"),
-};
+// const options = {
+//   key: fs.readFileSync("./server/ssl/key.pem", "utf-8"),
+//   cert: fs.readFileSync("./server/ssl/cert.pem", "utf-8"),
+// };
+// const httpsServer = https.createServer(options, app);
 
-const httpsServer = https.createServer(options, app);
-httpsServer.listen(3000, () => {
+const httpServer = http.createServer(app);
+httpServer.listen(3000, () => {
   console.log("listening on port: " + 3000);
 });
 
-const io = new Server(httpsServer);
+const io = new Server(httpServer);
 const connections = io.of("/mediasoup");
 
 const peers: Record<string, IPeerData> = {}; // Record<socketId, IPeerData> = {}
@@ -66,6 +68,7 @@ export const main = async () => {
     socket.on("disconnect", () => handlePeerDisconnect(socket.id));
 
     socket.on("joinRoom", async ({ roomName }, callback) => {
+      console.log(roomName);
       const router = await joinRoom(worker, roomName, socket.id);
 
       peers[socket.id] = {
@@ -93,24 +96,16 @@ export const main = async () => {
         // get Router (Room) object this peer is in based on RoomName
         const router = rooms[roomName].router;
 
-        createWebRtcTransport(router).then(
-          (webRtcTransport) => {
-            callback({
-              params: {
-                id: webRtcTransport.id,
-                iceParameters: webRtcTransport.iceParameters,
-                iceCandidates: webRtcTransport.iceCandidates,
-                dtlsParameters: webRtcTransport.dtlsParameters,
-              },
-            });
+        const webRtcTransport = await createWebRtcTransport(router);
+        callback({
+          id: webRtcTransport.id,
+          iceParameters: webRtcTransport.iceParameters,
+          iceCandidates: webRtcTransport.iceCandidates,
+          dtlsParameters: webRtcTransport.dtlsParameters,
+        });
 
-            // add transport to Peer's properties
-            addTransport(socket.id, webRtcTransport, consumer);
-          },
-          (error) => {
-            console.log(error);
-          }
-        );
+        // add transport to Peer's properties
+        addTransport(socket.id, webRtcTransport, consumer);
       }
     );
 
@@ -217,27 +212,21 @@ export const main = async () => {
   });
 
   const createWebRtcTransport = async (router: Router) => {
-    return new Promise<WebRtcTransport>(async (resolve, reject) => {
-      try {
-        const transport = await router.createWebRtcTransport(
-          config.webRtcTransport
-        );
+    const transport = await router.createWebRtcTransport(
+      config.webRtcTransport
+    );
 
-        transport.on("dtlsstatechange", (dtlsState) => {
-          if (dtlsState === "closed") {
-            transport.close();
-          }
-        });
-
-        transport.on("@close", () => {
-          console.log("transport closed");
-        });
-
-        resolve(transport);
-      } catch (error) {
-        reject(error);
+    transport.on("dtlsstatechange", (dtlsState) => {
+      if (dtlsState === "closed") {
+        transport.close();
       }
     });
+
+    transport.on("@close", () => {
+      console.log("transport closed");
+    });
+
+    return transport;
   };
 };
 

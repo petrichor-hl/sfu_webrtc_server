@@ -41,6 +41,7 @@ export const config: ISfuServerConfig = {
     listenInfos: [
       {
         protocol: "udp",
+        // ip: "192.168.22.88",  // Redmi Note 12 Pro Hotspot
         ip: "192.168.1.8",
       },
     ],
