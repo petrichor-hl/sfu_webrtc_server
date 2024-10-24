@@ -129,10 +129,13 @@ const createSendTransport = () => {
             {
               dtlsParameters,
             },
-            (isAlreadyMembers) => {
-              if (isAlreadyMembers) {
-                getProducers();
-              }
+            (peersProducerIds) => {
+              Object.keys(peersProducerIds).forEach((key) => {
+                console.log(`Peer ${key}`);
+                peersProducerIds[key].forEach((serverProducerId) =>
+                  signalNewPeer(key, serverProducerId)
+                );
+              });
             }
           );
 
@@ -204,18 +207,6 @@ socket.on("new-producer", ({ socketId, newProducerId }) => {
   // console.log("new-producer-id = " + producerId);
   signalNewPeer(socketId, newProducerId);
 });
-
-const getProducers = () => {
-  socket.emit("getOthersPeerProducerIdsInRoom", (peersProducerIds) => {
-    console.log(`Peers in Room`);
-    Object.keys(peersProducerIds).forEach((key) => {
-      console.log(`Peer ${key}`);
-      peersProducerIds[key].forEach((serverProducerId) =>
-        signalNewPeer(key, serverProducerId)
-      );
-    });
-  });
-};
 
 socket.on("producer-closed", (peerSocketId) => {
   console.log("producer-closed");

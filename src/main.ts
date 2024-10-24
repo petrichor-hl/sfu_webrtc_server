@@ -68,7 +68,7 @@ export const main = async () => {
     socket.on("disconnect", () => handlePeerDisconnect(socket.id));
 
     socket.on("joinRoom", async ({ roomName }, callback) => {
-      console.log(roomName);
+      // console.log(`peer ${socket.id} joined room ${roomName}`);
       const router = await joinRoom(worker, roomName, socket.id);
 
       peers[socket.id] = {
@@ -95,8 +95,8 @@ export const main = async () => {
 
         // get Router (Room) object this peer is in based on RoomName
         const router = rooms[roomName].router;
-
         const webRtcTransport = await createWebRtcTransport(router);
+
         callback({
           id: webRtcTransport.id,
           iceParameters: webRtcTransport.iceParameters,
@@ -109,20 +109,14 @@ export const main = async () => {
       }
     );
 
-    socket.on("getOthersPeerProducerIdsInRoom", (callback) => {
-      const producerIds = getOthersPeerProducerIdsInRoom(socket.id);
-      callback(producerIds);
-    });
-
     // see client's socket.emit('transport-connect', ...)
     socket.on("transport-connect", ({ dtlsParameters }, callback) => {
       // getProducerTransport(socket.id).connect({ dtlsParameters });
       getProducerTransport(socket.id)?.connect({
         dtlsParameters,
       });
-      const roomName = peers[socket.id].roomName;
-      const isAlreadyMembers = rooms[roomName].peerSocketIds.length > 1;
-      callback(isAlreadyMembers);
+      const peersProducerIds = getOthersPeerProducerIdsInRoom(socket.id);
+      callback(peersProducerIds);
     });
 
     // see client's socket.emit('transport-produce', ...)
@@ -223,7 +217,7 @@ export const main = async () => {
     });
 
     transport.on("@close", () => {
-      console.log("transport closed");
+      // console.log("transport closed");
     });
 
     return transport;
