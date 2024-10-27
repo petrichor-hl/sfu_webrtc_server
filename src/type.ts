@@ -17,6 +17,7 @@ interface IConsumerTransport {
 }
 
 export interface IPeerData {
+  email: string;
   socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap, any>;
   roomName: string;
   serverProducerTransport: IProducerTransport;

@@ -16,6 +16,7 @@ import {
   WebRtcTransport,
 } from "mediasoup/node/lib/types";
 import { config } from "./config";
+import { TransportOptions, ConsumerOptions } from "mediasoup-client/lib/types";
 
 /**
  * Worker
@@ -61,17 +62,19 @@ export const main = async () => {
   connections.on("connection", async (socket) => {
     console.log(`\x1b[43m\x1b[30m==> peer ${socket.id} connected\x1b[0m`);
 
-    socket.emit("connection-success", {
-      socketId: socket.id,
-    });
-
     socket.on("disconnect", () => handlePeerDisconnect(socket.id));
 
-    socket.on("joinRoom", async ({ roomName }, callback) => {
-      // console.log(`peer ${socket.id} joined room ${roomName}`);
-      const router = await joinRoom(worker, roomName, socket.id);
+    socket.on("LeaveRoom", () => {
+      const peer = peers[socket.id];
+      console.log(`${peer.email} left room ${peer.roomName}`);
+    });
+
+    socket.on("joinRoom", ({ email, roomName }) => {
+      socket.join(roomName);
+      console.log(`${email} joined room ${roomName}`);
 
       peers[socket.id] = {
+        email,
         socket,
         roomName,
         serverProducerTransport: {
@@ -84,6 +87,11 @@ export const main = async () => {
         },
       };
 
+      joinRoom(worker, roomName, socket.id);
+    });
+
+    socket.on("getRouterRtpCapabilities", async ({ roomName }, callback) => {
+      const router = rooms[roomName].router;
       callback(router.rtpCapabilities);
     });
 
@@ -97,12 +105,14 @@ export const main = async () => {
         const router = rooms[roomName].router;
         const webRtcTransport = await createWebRtcTransport(router);
 
-        callback({
+        const params: TransportOptions = {
           id: webRtcTransport.id,
           iceParameters: webRtcTransport.iceParameters,
           iceCandidates: webRtcTransport.iceCandidates,
           dtlsParameters: webRtcTransport.dtlsParameters,
-        });
+        };
+
+        callback(params);
 
         // add transport to Peer's properties
         addTransport(socket.id, webRtcTransport, consumer);
@@ -154,54 +164,52 @@ export const main = async () => {
     socket.on(
       "transport-recv-consume",
       async ({ rtpCapabilities, serverProducerId }, callback) => {
-        try {
-          const { roomName } = peers[socket.id];
-          const router = rooms[roomName].router;
-          const consumerTransport = getConsumerTransport(socket.id);
+        const { roomName } = peers[socket.id];
+        const router = rooms[roomName].router;
+        const consumerTransport = getConsumerTransport(socket.id);
 
-          // check if the router can consume the specified producer
-          if (
-            router.canConsume({
-              producerId: serverProducerId,
-              rtpCapabilities,
-            })
-          ) {
-            // transport can now consume and return a consumer
-            const newConsumer = await consumerTransport.consume({
-              producerId: serverProducerId,
-              rtpCapabilities,
-              paused: true,
-            });
-
-            // newConsumer.on("transportclose", () => {
-            //   console.log(`${newConsumer.kind} consumer closed`);
-            // });
-
-            addConsumer(socket.id, newConsumer);
-
-            const params = {
-              id: newConsumer.id, // remote/server Consumer Id
-              producerId: serverProducerId,
-              kind: newConsumer.kind,
-              rtpParameters: newConsumer.rtpParameters,
-            };
-
-            // send the parameters to the client
-            callback({ params });
-          }
-        } catch (error) {
-          console.log(error);
-          callback({
-            params: {
-              error: error,
-            },
+        // check if the router can consume the specified producer
+        if (
+          router.canConsume({
+            producerId: serverProducerId,
+            rtpCapabilities,
+          })
+        ) {
+          // transport can now consume and return a consumer
+          const newConsumer = await consumerTransport.consume({
+            producerId: serverProducerId,
+            rtpCapabilities,
+            paused: true,
           });
+
+          // newConsumer.on("transportclose", () => {
+          //   console.log(`${newConsumer.kind} consumer closed`);
+          // });
+
+          addConsumer(socket.id, newConsumer);
+
+          const params: ConsumerOptions = {
+            id: newConsumer.id, // remote/server Consumer Id
+            producerId: serverProducerId,
+            kind: newConsumer.kind,
+            rtpParameters: newConsumer.rtpParameters,
+          };
+
+          // send the parameters to the client
+          callback(params);
         }
       }
     );
 
     socket.on("consumer-resume", async ({ serverConsumerId }) => {
       await getServerConsumer(socket.id, serverConsumerId).resume();
+    });
+
+    socket.on("cameraStatusChanged", (cameraStatus: boolean) => {
+      const peer = peers[socket.id];
+      socket
+        .to(peer.roomName)
+        .emit("cameraStatusChanged", { peerEmail: peer.email, cameraStatus });
     });
   });
 
@@ -274,14 +282,9 @@ const addConsumer = (socketId: string, serverConsumer: Consumer) => {
 const informConsumers = (socketId: string, newProducerId: string) => {
   const roomName = peers[socketId].roomName;
 
-  rooms[roomName].peerSocketIds.forEach((peerSocketId) => {
-    if (peerSocketId !== socketId) {
-      peers[peerSocketId].socket.emit("new-producer", {
-        socketId,
-        newProducerId,
-      });
-    }
-  });
+  peers[socketId].socket
+    .to(roomName)
+    .emit("new-producer", { peerEmail: peers[socketId].email, newProducerId });
 };
 
 const getOthersPeerProducerIdsInRoom = (socketId: string) => {
@@ -290,7 +293,8 @@ const getOthersPeerProducerIdsInRoom = (socketId: string) => {
   const producerIdsInRoom: Record<string, string[]> = {}; // Record<socketId, [producer0.id, producer1.id]>
   rooms[roomName].peerSocketIds.forEach((peerSocketId) => {
     if (peerSocketId !== socketId) {
-      producerIdsInRoom[peerSocketId] = peers[
+      const peerEmail = peers[peerSocketId].email;
+      producerIdsInRoom[peerEmail] = peers[
         peerSocketId
       ].serverProducerTransport.producers.map((producer) => producer.id);
     }
@@ -334,7 +338,7 @@ const handlePeerDisconnect = (socketId: string) => {
     );
     rooms[roomName].peerSocketIds.forEach((peerSocketId) => {
       const socket = peers[peerSocketId].socket;
-      socket.emit("producer-closed", socketId);
+      socket.emit("producer-closed", peers[socketId].email);
     });
   }
 
