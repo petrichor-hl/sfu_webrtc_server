@@ -60,14 +60,9 @@ export const main = async () => {
   });
 
   connections.on("connection", async (socket) => {
-    console.log(`\x1b[43m\x1b[30m==> peer ${socket.id} connected\x1b[0m`);
+    console.log(`\x1b[44m\x1b[30m==> peer ${socket.id} connected\x1b[0m`);
 
     socket.on("disconnect", () => handlePeerDisconnect(socket.id));
-
-    socket.on("LeaveRoom", () => {
-      const peer = peers[socket.id];
-      console.log(`${peer.email} left room ${peer.roomName}`);
-    });
 
     socket.on("joinRoom", ({ email, roomName }) => {
       socket.join(roomName);
@@ -310,6 +305,8 @@ const getServerConsumer = (socketId: string, serverConsumerId: string) => {
 };
 
 const handlePeerDisconnect = (socketId: string) => {
+  const peer = peers[socketId];
+  console.log(`${peer.email} left room ${peer.roomName}`);
   console.log(`\x1b[44m\x1b[30m==> peer ${socketId} disconnected\x1b[0m`);
   /**
    * By Default:
@@ -342,7 +339,7 @@ const handlePeerDisconnect = (socketId: string) => {
     });
   }
 
-  peers[socketId].serverProducerTransport.transport.close();
-  peers[socketId].serverConsumerTransport.transport.close();
+  peers[socketId].serverProducerTransport.transport?.close();
+  peers[socketId].serverConsumerTransport.transport?.close();
   delete peers[socketId];
 };
