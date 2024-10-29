@@ -199,13 +199,6 @@ export const main = async () => {
     socket.on("consumer-resume", async ({ serverConsumerId }) => {
       await getServerConsumer(socket.id, serverConsumerId).resume();
     });
-
-    socket.on("cameraStatusChanged", (cameraStatus: boolean) => {
-      const peer = peers[socket.id];
-      socket
-        .to(peer.roomName)
-        .emit("cameraStatusChanged", { peerEmail: peer.email, cameraStatus });
-    });
   });
 
   const createWebRtcTransport = async (router: Router) => {
