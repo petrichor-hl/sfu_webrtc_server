@@ -62,12 +62,19 @@ export const main = async () => {
   connections.on("connection", async (socket) => {
     console.log(`\x1b[44m\x1b[30m==> peer ${socket.id} connected\x1b[0m`);
 
-    socket.on("disconnect", () => handlePeerDisconnect(socket.id));
+    socket.on("disconnect", () => {
+      console.log(`\x1b[44m\x1b[30m==> peer ${socket.id} disconnected\x1b[0m`);
+      // Nếu người dùng đang trong room => Thoát room
+      if (peers[socket.id] !== undefined) {
+        leaveRoom(socket.id);
+      }
+    });
 
     socket.on("joinRoom", ({ email, roomName }) => {
       socket.join(roomName);
       console.log(`${email} joined room ${roomName}`);
 
+      // Lưu trữ thông tin của Connection
       peers[socket.id] = {
         email,
         socket,
@@ -83,6 +90,12 @@ export const main = async () => {
       };
 
       joinRoom(worker, roomName, socket.id);
+    });
+
+    socket.on("leaveRoom", ({ email, roomName }) => {
+      socket.leave(roomName);
+      console.log(`${email} left room ${roomName}`);
+      leaveRoom(socket.id);
     });
 
     socket.on("getRouterRtpCapabilities", async ({ roomName }, callback) => {
@@ -120,6 +133,11 @@ export const main = async () => {
       getProducerTransport(socket.id)?.connect({
         dtlsParameters,
       });
+      const peersProducerIds = getOthersPeerProducerIdsInRoom(socket.id);
+      callback(peersProducerIds);
+    });
+
+    socket.on("get-others-peer-poducer-ids-in-room", (callback) => {
       const peersProducerIds = getOthersPeerProducerIdsInRoom(socket.id);
       callback(peersProducerIds);
     });
@@ -297,19 +315,13 @@ const getServerConsumer = (socketId: string, serverConsumerId: string) => {
   )!;
 };
 
-const handlePeerDisconnect = (socketId: string) => {
-  const peer = peers[socketId];
-  console.log(`${peer.email} left room ${peer.roomName}`);
-  console.log(`\x1b[44m\x1b[30m==> peer ${socketId} disconnected\x1b[0m`);
+const leaveRoom = (socketId: string) => {
   /**
    * By Default:
-   * Emitted when the transport this consumer belongs to is closed for whatever reason.
-   * The producer & consumer itself is also closed.
-   *
-   * When the associated producer is closed for whatever reason.
-   * The consumer itself is also closed.
+   * Router close
+   * => Transports belong to close
+   * => Producers & Consumers belong to close
    **/
-
   const roomName = peers[socketId].roomName;
   rooms[roomName].peerSocketIds = rooms[roomName].peerSocketIds.filter(
     (peerSocketId) => peerSocketId !== socketId
